@@ -1,52 +1,54 @@
 # CPA-NORT
 
-CPA-NORT is a fork of [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) focused on running imported OAuth JSON credentials that may only contain a valid `access_token` and no usable `refresh_token`.
+中文 | [English](README_EN.md)
 
-The fork keeps the original CLIProxyAPI compatibility surface while improving behavior for no-refresh-token auth files:
+CPA-NORT 是基于 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的二开版本，重点优化“导入的 OAuth JSON 只有可用 `access_token`、没有可用 `refresh_token`”这一类使用场景。
 
-- OpenAI/Codex compatible API endpoints
-- Gemini, Claude, Codex, Antigravity, Kimi, and OpenAI-compatible provider support inherited from CLIProxyAPI
-- Multi-account auth loading from JSON files
-- Round-robin and session-affinity routing
-- Streaming, non-streaming, and supported WebSocket transports
-- No-refresh-token OAuth JSON support without background refresh loops
-- Optional global switch to disable OAuth/file auth auto-refresh checks
+本项目保留 CLIProxyAPI 原有的兼容接口，同时改进无 refresh token 凭据的运行表现：
 
-## Why This Fork
+- 提供 OpenAI/Codex 兼容 API 接口
+- 继承 Gemini、Claude、Codex、Antigravity、Kimi、OpenAI-compatible 等 provider 支持
+- 支持从 JSON 文件加载多账号凭据
+- 支持轮询与会话粘性路由
+- 支持流式、非流式，以及受支持场景下的 WebSocket 传输
+- 支持无 `refresh_token` OAuth JSON，不再进入后台刷新循环
+- 提供全局开关，可禁用 OAuth/file auth 的后台自动刷新检查
 
-Some imported auth JSON files contain an access token that still works, but either omit `refresh_token` or contain a refresh token that cannot be reused. In the upstream-style auto-refresh flow, those credentials can be repeatedly scheduled for background refresh checks and may produce noisy failures or intermittent stalls.
+## 为什么有这个版本
 
-CPA-NORT treats auth files without `refresh_token` as access-token-only credentials:
+有些导入的 auth JSON 里，`access_token` 仍然可用，但没有 `refresh_token`，或者 `refresh_token` 已经无法再次使用。传统后台自动刷新逻辑可能会反复把这些凭据加入刷新调度，造成日志噪音，甚至出现间歇性卡顿。
 
-- Requests continue to use the existing `access_token`.
-- Real upstream `401` responses are still detected normally during actual API calls.
-- Background OAuth refresh scheduling is skipped for providers that require a refresh token.
-- The proxy does not call the refresh endpoint just to prove a token can be refreshed.
+CPA-NORT 会把缺少 `refresh_token` 的 auth 文件按 access-token-only 凭据处理：
 
-## Quick Start
+- 实际请求继续使用现有 `access_token`。
+- 如果 access token 真的失效，上游返回的 `401` 仍会在真实请求中被正常检测。
+- 对依赖 refresh token 的 provider，缺少 `refresh_token` 时直接跳过后台刷新调度。
+- 不会为了“测活”而调用刷新接口。
+
+## 快速开始
 
 ```bash
 go build -o cli-proxy-api ./cmd/server
 ./cli-proxy-api --config config.yaml
 ```
 
-On Windows PowerShell:
+Windows PowerShell：
 
 ```powershell
 go build -o cli-proxy-api.exe ./cmd/server
 .\cli-proxy-api.exe --config config.yaml
 ```
 
-## Configuration
+## 配置
 
-Create or edit `config.yaml`:
+创建或编辑 `config.yaml`：
 
 ```yaml
 host: "127.0.0.1"
 port: 8317
 auth-dir: "./auths"
 
-# Optional safety switch. When true, all background OAuth/file auth refresh checks are disabled.
+# 可选保险开关。为 true 时禁用所有 OAuth/file auth 后台自动刷新检查。
 disable-auth-auto-refresh: false
 
 request-retry: 3
@@ -54,14 +56,14 @@ max-retry-credentials: 0
 max-retry-interval: 30
 ```
 
-Put OAuth JSON files under `auth-dir`, for example:
+把 OAuth JSON 放到 `auth-dir` 下，例如：
 
 ```text
 auths/
   token_user@example.com.json
 ```
 
-For Codex/OpenAI access-token-only files, the important fields are typically:
+Codex/OpenAI access-token-only 文件通常只需要类似字段：
 
 ```json
 {
@@ -72,11 +74,11 @@ For Codex/OpenAI access-token-only files, the important fields are typically:
 }
 ```
 
-If `refresh_token` is missing, CPA-NORT will skip background refresh scheduling for providers that cannot refresh without it.
+如果缺少 `refresh_token`，CPA-NORT 会对无法无刷新凭据续期的 provider 跳过后台刷新调度。
 
-## OAuth Client Credentials
+## OAuth Client 凭据
 
-CPA-NORT does not hard-code Google OAuth client credentials in the repository. If you need to run interactive Gemini CLI or Antigravity OAuth login flows, provide the client credentials through environment variables:
+CPA-NORT 不在仓库中硬编码 Google OAuth client 凭据。如果需要使用 Gemini CLI 或 Antigravity 的交互式 OAuth 登录流程，请通过环境变量提供：
 
 ```bash
 export CPA_NORT_GEMINI_OAUTH_CLIENT_ID="..."
@@ -85,26 +87,26 @@ export CPA_NORT_ANTIGRAVITY_OAUTH_CLIENT_ID="..."
 export CPA_NORT_ANTIGRAVITY_OAUTH_CLIENT_SECRET="..."
 ```
 
-Imported access-token-only JSON files do not need these variables unless you want the proxy to perform OAuth login or refresh flows.
+如果只是导入 access-token-only JSON，通常不需要这些变量，除非你希望代理执行 OAuth 登录或刷新流程。
 
-## API Usage
+## API 使用
 
-Point OpenAI-compatible clients at the proxy:
+把 OpenAI-compatible 客户端指向代理：
 
 ```bash
 export OPENAI_BASE_URL="http://127.0.0.1:8317/v1"
 export OPENAI_API_KEY="any-configured-proxy-key"
 ```
 
-Then call compatible endpoints such as:
+可调用的兼容接口包括：
 
 - `/v1/chat/completions`
 - `/v1/responses`
 - `/v1/models`
 
-Exact available models depend on your auth files and `config.yaml`.
+实际可用模型取决于你的 auth 文件和 `config.yaml`。
 
-## Development
+## 开发
 
 ```bash
 gofmt -w .
@@ -112,21 +114,21 @@ go test ./...
 go build -o test-output ./cmd/server
 ```
 
-Remove `test-output` after compile verification if you do not need it.
+如果不需要编译产物，验证后可删除 `test-output`。
 
-## Notes
+## 注意事项
 
-- Access-token-only JSON files are still temporary. Once the upstream access token expires, requests may return `401` and the account must be re-imported or re-authenticated.
-- If you want to completely disable background OAuth/file auth refresh checks for every provider, set `disable-auth-auto-refresh: true`.
-- Keep tokens and auth JSON files private. Do not commit `auths/` or real credentials.
+- access-token-only JSON 仍然是临时凭据。上游 access token 过期后，请求可能返回 `401`，届时需要重新导入或重新登录。
+- 如果想完全禁用所有 provider 的 OAuth/file auth 后台刷新检查，可以设置 `disable-auth-auto-refresh: true`。
+- 不要提交真实 token 或 auth JSON。请保护好 `auths/` 目录和凭据文件。
 
-## Upstream
+## 上游项目
 
-This project is based on CLIProxyAPI:
+本项目基于 CLIProxyAPI：
 
 - GitHub: <https://github.com/router-for-me/CLIProxyAPI>
 - License: MIT
 
-## License
+## 许可证
 
-MIT License. See [LICENSE](LICENSE).
+MIT License，详见 [LICENSE](LICENSE)。
